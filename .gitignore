@@ -1,0 +1,8 @@
+out/*
+!out/gajae-android-agent.apk
+.gradle/
+build/
+app/build/
+*.keystore
+*.idsig
+*.class
