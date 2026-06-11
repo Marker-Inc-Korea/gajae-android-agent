@@ -1,0 +1,9 @@
+0,0,120,60|Search in mail
+10,120,500,160|Unread, Alice Kim
+10,165,700,205|Project launch notes
+10,210,900,245|The Android agent PRD comments arrived today
+10,280,500,320|Bob Lee
+10,325,700,365|Read weekly status
+10,420,500,460|Unread, Security Team
+10,465,700,505|New sign-in alert
+10,510,900,545|A new Android device signed in
