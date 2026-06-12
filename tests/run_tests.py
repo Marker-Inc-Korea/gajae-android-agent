@@ -65,6 +65,29 @@ def test_readme_points_to_signed_apk():
     assert_true('API endpoint' in doc, 'missing API setup instructions')
 
 
+def test_voice_modules_exist():
+    app_src = ROOT / 'app/src/main/java/com/gajae/androidagent'
+    for name in ['SpeechInputController.java', 'SpeechOutputController.java', 'VoiceCallback.java', 'VoiceState.java']:
+        assert_true((app_src / name).exists(), f'missing {name}')
+    assert_true((SRC / 'SpokenResponseLimiter.java').exists(), 'missing SpokenResponseLimiter')
+
+
+def test_voice_docs_and_permission():
+    doc = (ROOT / 'docs/VOICE_AGENT.md').read_text()
+    manifest = (ROOT / 'app/src/main/AndroidManifest.xml').read_text()
+    assert_true('SpeechRecognizer' in doc and 'TextToSpeech' in doc, 'missing system voice stack')
+    assert_true('Sherpa-ONNX' in doc, 'missing open source fallback recommendation')
+    assert_true('android.permission.RECORD_AUDIO' in manifest, 'missing audio permission')
+
+
+def test_google_gemini_api_support():
+    code = (SRC / 'HttpVlmClient.java').read_text()
+    assert_true('generativelanguage.googleapis.com' in code, 'missing Gemini endpoint')
+    assert_true(':generateContent?key=' in code, 'missing Gemini API key query')
+    assert_true('contents' in code and 'parts' in code, 'missing Gemini request body')
+    assert_true('Authorization' in code, 'missing non-Google bearer fallback')
+
+
 if __name__ == '__main__':
     tests = [value for name, value in sorted(globals().items()) if name.startswith('test_')]
     for test in tests:

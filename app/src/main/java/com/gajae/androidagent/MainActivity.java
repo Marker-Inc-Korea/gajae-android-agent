@@ -1,6 +1,8 @@
 package com.gajae.androidagent;
 
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -13,8 +15,9 @@ import com.gajae.androidagent.core.AgentResult;
 import com.gajae.androidagent.core.GmailScenario;
 import com.gajae.androidagent.core.NoopVlmClient;
 import com.gajae.androidagent.core.UniversalAppAgent;
+import com.gajae.androidagent.core.SpokenResponseLimiter;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends Activity implements VoiceCallback {
     private TextView status;
     private GmailLauncher launcher;
     private EditText instruction;
@@ -22,12 +25,19 @@ public final class MainActivity extends Activity {
     private EditText apiKey;
     private EditText model;
     private ConfigStore configStore;
+    private SpeechInputController speechInput;
+    private SpeechOutputController speechOutput;
+    private VoiceState voiceState = VoiceState.IDLE;
+    private final SpokenResponseLimiter spokenLimiter = new SpokenResponseLimiter();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         launcher = new GmailLauncher(this);
         configStore = new ConfigStore(this);
+        speechOutput = new SpeechOutputController(this);
+        speechInput = new SpeechInputController(this, this);
+        requestAudioPermission();
         setContentView(buildUi());
     }
 
@@ -78,6 +88,20 @@ public final class MainActivity extends Activity {
         });
         layout.addView(generic);
 
+        Button listen = new Button(this);
+        listen.setText("말로 지시하기 / 끼어들기");
+        listen.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { startVoiceTurn(); }
+        });
+        layout.addView(listen);
+
+        Button stopVoice = new Button(this);
+        stopVoice.setText("말 끊기");
+        stopVoice.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { stopVoiceNow(); }
+        });
+        layout.addView(stopVoice);
+
         Button run = new Button(this);
         run.setText("Gmail 새 메일 요약 실행");
         run.setOnClickListener(new View.OnClickListener() {
@@ -112,7 +136,7 @@ public final class MainActivity extends Activity {
             @Override public void run() {
                 final AgentResult result = scenario.run();
                 runOnUiThread(new Runnable() {
-                    @Override public void run() { status.setText(result.message); }
+                    @Override public void run() { publishResult(result.message); }
                 });
             }
         }).start();
@@ -137,7 +161,7 @@ public final class MainActivity extends Activity {
             @Override public void run() {
                 final AgentResult result = agent.run(text);
                 runOnUiThread(new Runnable() {
-                    @Override public void run() { status.setText(result.message); }
+                    @Override public void run() { publishResult(result.message); }
                 });
             }
         }).start();
@@ -146,5 +170,56 @@ public final class MainActivity extends Activity {
     private void saveConfig() {
         configStore.save(endpoint.getText().toString(), apiKey.getText().toString(), model.getText().toString());
         status.setText("API 설정을 저장했습니다. 접근성 서비스를 켠 뒤 자연어 지시를 실행하세요.");
+    }
+
+    private void startVoiceTurn() {
+        speechOutput.stop();
+        speechInput.cancel();
+        voiceState = VoiceState.LISTENING;
+        status.setText("듣고 있습니다. 말씀하세요.");
+        speechInput.start();
+    }
+
+    private void stopVoiceNow() {
+        speechInput.cancel();
+        speechOutput.stop();
+        voiceState = VoiceState.IDLE;
+        status.setText("음성을 중단했습니다.");
+    }
+
+    private void publishResult(String message) {
+        String shortText = spokenLimiter.shortAnswer(message);
+        status.setText(shortText);
+        voiceState = VoiceState.SPEAKING;
+        speechOutput.speak(shortText);
+    }
+
+    private void requestAudioPermission() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, 42);
+        }
+    }
+
+    @Override public void onPartialText(String text) {
+        instruction.setText(text);
+        instruction.setSelection(instruction.length());
+    }
+
+    @Override public void onFinalText(String text) {
+        instruction.setText(text);
+        instruction.setSelection(instruction.length());
+        voiceState = VoiceState.THINKING;
+        runUniversalInstruction();
+    }
+
+    @Override public void onVoiceError(String message) {
+        voiceState = VoiceState.IDLE;
+        status.setText(message);
+    }
+
+    @Override protected void onDestroy() {
+        speechInput.destroy();
+        speechOutput.destroy();
+        super.onDestroy();
     }
 }
